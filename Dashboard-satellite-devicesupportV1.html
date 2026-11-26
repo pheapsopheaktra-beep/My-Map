@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Charge+ Cambodia — EV Competitor & Network Map Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    html, body { height: 100%; height: 100dvh; margin: 0; font-family: Inter, system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; overflow: hidden; }
+    @media (max-width: 1023px) {
+      .mobile-drawer-closed {
+        transform: translateX(-100%);
+      }
+      .mobile-drawer-open {
+        transform: translateX(0);
+      }
+    }
+    #map {
+      position: absolute;
+      inset: 0;
+      height: 100%;
+      width: 100%;
+      z-index: 1;
+      background: #0b1220;
+    }
+    .custom-pin-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: auto;
+    }
+    .custom-pin {
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 9999px; color: #fff; font-weight: 700; font-size: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.45); border: 2px solid #fff;
+      transition: transform 0.15s ease;
+      cursor: pointer;
+    }
+    .custom-pin:hover { transform: scale(1.18); z-index: 999 !important; }
+    .pin-label {
+      margin-top: 2px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #f8fafc;
+      font-size: 9px;
+      font-weight: 600;
+      white-space: nowrap;
+      max-width: 130px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+    }
+    .pin-chargeplus {
+      background: #10b981;
+      padding: 0;
+      overflow: hidden;
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.45), 0 4px 12px rgba(0,0,0,0.55);
+    }
+    .pin-chargeplus img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .pin-unify { background: #3b82f6; }
+    .pin-appbank { background: #8b5cf6; }
+    .pin-evenergy { background: #f59e0b; }
+    .pin-khmerev { background: #ec4899; }
+    .pin-camev { background: #06b6d4; }
+    .pin-other { background: #64748b; }
+    .user-gps-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 9999px;
+      background: #2563eb;
+      border: 3px solid #ffffff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35), 0 3px 8px rgba(0,0,0,0.5);
+      position: relative;
+    }
+    .user-gps-dot::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 9999px;
+      border: 2px solid rgba(59, 130, 246, 0.7);
+      animation: gpsPulse 2s ease-out infinite;
+    }
+    @keyframes gpsPulse {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      100% { transform: scale(1.7); opacity: 0; }
+    }
+    .leaflet-popup-content-wrapper { background: #1e293b; color: #f8fafc; border: 1px solid #334155; border-radius: 12px; }
+    .leaflet-popup-tip { background: #1e293b; }
+    .leaflet-tooltip {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 11px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+    }
+    .leaflet-control-layers {
+      background: rgba(15, 23, 42, 0.95) !important;
+      color: #f8fafc !important;
+      border: 1px solid #334155 !important;
+      border-radius: 10px !important;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4) !important;
+    }
+    .leaflet-control-layers-expanded {
+      padding: 8px 12px !important;
+      font-size: 12px !important;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="flex flex-col h-screen h-[100dvh] overflow-hidden">
+
+  <!-- Top Header -->
+  <header class="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 sm:py-2.5 flex flex-wrap items-center justify-between gap-2 sm:gap-3 shrink-0 z-30">
+    <div class="flex items-center justify-between w-full lg:w-auto gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <!-- Mobile/Tablet Sidebar Toggle -->
+        <button id="btn-toggle-sidebar" type="button" aria-label="Toggle stations panel"
+          class="lg:hidden shrink-0 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-200 text-base">
+          ☰
+        </button>
+        <div class="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-base sm:text-lg">⚡</div>
+        <div class="min-w-0">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-2 truncate">
+            <span class="truncate">Charge+ Cambodia Intel</span>
+            <span class="hidden sm:inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">26 Nov 2026</span>
+          </h1>
+          <p id="header-subtitle" class="text-[11px] sm:text-xs text-slate-400 truncate">0 Mapped Stations • Load an .xlsx file to populate map & analytics</p>
+        </div>
+      </div>
+
+      <!-- Mobile Quick Actions (Load .xlsx + Clear + KPI/Tools toggle) -->
+      <div class="flex lg:hidden items-center gap-1.5 shrink-0">
+        <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-1 shadow-sm">
+          <span>📂</span>
+          <span class="hidden xs:inline">Load</span>
+          <input type="file" id="excel-upload-mobile" accept=".xlsx,.xls" class="hidden" />
+        </label>
+        <button id="btn-clear-saved-mobile" type="button" title="Clear saved station data"
+          class="hidden bg-slate-800 hover:bg-rose-950/70 border border-slate-700 text-rose-300 px-2 py-1.5 rounded-lg text-xs font-medium">
+          🗑️
+        </button>
+        <button id="btn-toggle-tools" type="button" aria-label="Toggle stats and tools"
+          class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-medium">
+          Stats ▾
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Strip & Desktop/Tablet Tools (collapsible on small screens) -->
+    <div id="header-tools" class="hidden lg:flex flex-wrap items-center gap-2 text-xs w-full lg:w-auto pt-1 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+      <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+        <div class="bg-slate-800/80 border border-slate-700 px-2.5 py-1.5 rounded-lg">
+          <span class="text-slate-400">Sites:</span>
+          <span id="kpi-total" class="font-bold text-white ml-1">0</span>
+        </div>
+        <div class="bg-emerald-950/60 border border-emerald-700/50 px-2.5 py-1.5 rounded-lg">
+          <span class="text-emerald-300">Charge+:</span>
+          <span id="kpi-cp" class="font-bold text-emerald-400 ml-1">0 (0.0%)</span>
+        </div>
+        <div class="bg-slate-800/80 border border-slate-700 px-2.5 py-1.5 rounded-lg">
+          <span class="text-slate-400">150+ kW:</span>
+          <span id="kpi-hpc" class="font-bold text-amber-400 ml-1">0</span>
+        </div>
+        <div class="bg-slate-800/80 border border-slate-700 px-2.5 py-1.5 rounded-lg">
+          <span class="text-slate-400">Provinces:</span>
+          <span id="kpi-prov" class="font-bold text-sky-400 ml-1">0</span>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+        <!-- Quick Focus Presets -->
+        <select id="focus-region" title="Jump to hub"
+          class="flex-1 sm:flex-none bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+          <option value="CAMBODIA">📍 All Cambodia</option>
+          <option value="PP">🏙️ Phnom Penh</option>
+          <option value="SHV">🌊 Sihanoukville</option>
+          <option value="SR">🏛️ Siem Reap</option>
+        </select>
+
+        <!-- Export Station List Controls -->
+        <div class="flex items-center bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+          <select id="export-format" title="Export file format"
+            class="bg-slate-800 text-slate-200 text-xs px-2 py-1.5 focus:outline-none border-r border-slate-700">
+            <option value="csv">CSV</option>
+            <option value="xlsx">XLSX</option>
+          </select>
+          <button id="btn-export-list" type="button" title="Export currently filtered station list with nearest Charge+ & competitor details"
+            class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-medium px-2.5 py-1.5 text-xs transition flex items-center gap-1">
+            <span>⬇️ Export</span>
+          </button>
+        </div>
+
+        <!-- Load / Update Excel Button -->
+        <label class="hidden lg:flex cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg transition items-center gap-1.5 shadow-sm">
+          <span>📂 Load / Update .xlsx</span>
+          <input type="file" id="excel-upload" accept=".xlsx,.xls" class="hidden" />
+        </label>
+        <button id="btn-clear-saved" type="button" title="Clear saved station data from browser storage"
+          class="hidden bg-slate-800 hover:bg-rose-950/70 border border-slate-700 hover:border-rose-700/60 text-slate-300 hover:text-rose-300 font-medium px-2.5 py-1.5 rounded-lg text-xs transition">
+          🗑️ Clear Saved
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- Mobile/Tablet Drawer Backdrop -->
+    <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-[1px] z-20 lg:hidden"></div>
+
+    <!-- Left Control & Station Sidebar (Slide-over drawer on mobile/tablet, docked on desktop) -->
+    <aside id="sidebar-drawer" class="fixed lg:static inset-y-0 left-0 w-[88vw] max-w-sm lg:w-96 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 z-30 lg:z-10 transition-transform duration-200 ease-out mobile-drawer-closed lg:translate-x-0 shadow-2xl lg:shadow-none">
+
+      <!-- Mobile/Tablet Drawer Header -->
+      <div class="flex lg:hidden items-center justify-between px-3 py-2 border-b border-slate-800 bg-slate-950/60">
+        <span class="text-xs font-bold text-slate-200">Stations, Rivals & Filters</span>
+        <button id="btn-close-sidebar" type="button" class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white">✕ Close</button>
+      </div>
+
+      <!-- View Tabs -->
+      <div class="grid grid-cols-3 border-b border-slate-800 text-xs font-semibold">
+        <button id="tab-stations" class="py-2.5 text-emerald-400 border-b-2 border-emerald-400 bg-slate-800/40">All Sites (0)</button>
+        <button id="tab-comp" class="py-2.5 text-slate-400 hover:text-white">Our Rivals (0)</button>
+        <button id="tab-prov" class="py-2.5 text-slate-400 hover:text-white">Provinces (0)</button>
+      </div>
+
+      <!-- Filter Panel (Visible on All Sites tab) -->
+      <div id="filters-panel" class="p-3 border-b border-slate-800 space-y-2.5 bg-slate-900/95">
+        <input id="search-input" type="text" placeholder="Search station, network, or province..."
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500" />
+
+        <div class="grid grid-cols-2 gap-2">
+          <select id="filter-network" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="ALL">All Networks</option>
+            <option value="Charge+">⚡ Charge+ Only (37)</option>
+            <option value="COMPETITORS">🏢 Competitors Only (387)</option>
+            <option value="Unify Charge / OneGo EV">Unify Charge / OneGo EV</option>
+            <option value="App Bank">App Bank</option>
+            <option value="EV Energy">EV Energy</option>
+            <option value="Khmer EV">Khmer EV</option>
+            <option value="Cam EV">Cam EV</option>
+            <option value="EV 168">EV 168</option>
+            <option value="GO EV">GO EV</option>
+          </select>
+
+          <select id="filter-province" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="ALL">All Provinces</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <select id="filter-power" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="0">Any Power (kW)</option>
+            <option value="60">60+ kW (DC Fast)</option>
+            <option value="120">120+ kW</option>
+            <option value="150">150+ kW (Ultra-Fast)</option>
+            <option value="240">240+ kW</option>
+          </select>
+
+          <select id="filter-connector" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="ALL">All Connectors</option>
+            <option value="Dual">GBT & CCS2 (Dual)</option>
+            <option value="GBT Only">GBT Only</option>
+            <option value="CCS2 Only">CCS2 Only</option>
+          </select>
+        </div>
+
+        <!-- Price / Tariff Filter -->
+        <div>
+          <select id="filter-price" title="Filter by charging tariff / price"
+            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="ALL">All Prices / Tariffs</option>
+            <option value="MAX_1050">💵 ≤ 1,050 ៛/kWh (~$0.26 AC)</option>
+            <option value="MAX_1350">💵 ≤ 1,350 ៛/kWh (~$0.34 DC)</option>
+            <option value="MAX_1450">💵 ≤ 1,450 ៛/kWh (~$0.36 Ultra-Fast)</option>
+            <option value="FREE">🎁 Free / 0 ៛</option>
+          </select>
+        </div>
+
+        <!-- Custom Display & Radius Controls -->
+        <div class="grid grid-cols-2 gap-2 pt-0.5">
+          <select id="radius-km" title="Charge+ coverage radius"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="1">Radius: 1 km</option>
+            <option value="2" selected>Radius: 2 km</option>
+            <option value="5">Radius: 5 km</option>
+          </select>
+          <select id="label-mode" title="Pin label display mode"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-emerald-500">
+            <option value="compact" selected>Pin Labels: Compact</option>
+            <option value="names">Pin Labels: Station Names</option>
+            <option value="power">Pin Labels: Power (kW)</option>
+          </select>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" id="toggle-cluster" checked class="accent-emerald-500 rounded" />
+            <span>Cluster pins</span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" id="toggle-radius" class="accent-emerald-500 rounded" />
+            <span>Charge+ rings</span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" id="toggle-measure" class="accent-emerald-500 rounded" />
+            <span>Measure dist</span>
+          </label>
+          <button id="btn-reset" class="text-emerald-400 hover:underline">Reset</button>
+        </div>
+      </div>
+
+      <!-- Dynamic List Container -->
+      <div id="sidebar-list" class="flex-1 overflow-y-auto divide-y divide-slate-800/70"></div>
+    </aside>
+
+    <!-- Map Canvas -->
+    <main class="flex-1 relative">
+      <div id="map"></div>
+
+      <!-- Tile Status Notice -->
+      <div id="tile-notice" class="hidden absolute top-3 left-14 z-[500] bg-amber-950/95 border border-amber-600/60 text-amber-200 px-3 py-1.5 rounded-lg text-[11px] shadow-lg">
+        Satellite tiles blocked or slow — switched to OpenStreetMap fallback.
+      </div>
+
+      <!-- Distance Ruler Banner -->
+      <div id="measure-banner" class="hidden absolute top-3 left-14 z-[500] bg-slate-900/95 border border-emerald-500/50 text-slate-100 px-3 py-1.5 rounded-lg text-[11px] shadow-lg flex items-center gap-3">
+        <span id="measure-text">Click two points or stations on the map to measure distance.</span>
+        <button id="btn-clear-measure" type="button" class="text-emerald-400 hover:underline font-semibold">Clear</button>
+      </div>
+
+      <!-- Floating Mobile/Tablet Quick Open Drawer Button -->
+      <button id="btn-floating-sites" type="button"
+        class="lg:hidden absolute bottom-4 left-3 z-[500] bg-slate-900/95 hover:bg-slate-800 border border-slate-700 text-emerald-400 font-semibold px-3 py-2 rounded-xl text-xs shadow-xl flex items-center gap-1.5">
+        <span>📋 Sites & Filters</span>
+      </button>
+
+      <!-- Floating Locate Me Button -->
+      <button id="btn-locate-me" type="button" title="Center map on your current GPS location and find nearest stations"
+        class="absolute bottom-16 sm:bottom-52 right-3 sm:right-5 z-[500] bg-slate-900/95 hover:bg-slate-800 border border-slate-700 text-sky-400 font-semibold px-3 py-2 rounded-xl text-xs shadow-xl flex items-center gap-1.5 transition">
+        <span id="locate-me-icon">📍</span>
+        <span id="locate-me-label">My Location</span>
+      </button>
+
+      <!-- Floating Map Legend (Collapsible on Mobile/Tablet) -->
+      <div class="absolute bottom-4 right-3 sm:bottom-5 sm:right-5 z-[500] bg-slate-900/95 backdrop-blur border border-slate-700 rounded-xl p-2.5 sm:p-3 text-xs shadow-xl">
+        <button id="btn-toggle-legend" type="button" class="flex items-center justify-between gap-2 w-full font-semibold text-slate-200 text-left">
+          <span>Legend</span>
+          <span id="legend-chevron" class="sm:hidden text-[10px] text-slate-400">▲</span>
+        </button>
+        <div id="legend-body" class="hidden sm:block mt-1.5 space-y-1.5">
+        <div class="flex items-center gap-2"><img src="data:image/jpeg;base64,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" alt="Charge+" class="w-4 h-4 rounded-full border border-white object-cover inline-block" /> Charge+ (Our Network)</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-blue-500 border border-white inline-block"></span> Unify Charge / OneGo EV</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-purple-500 border border-white inline-block"></span> App Bank</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500 border border-white inline-block"></span> EV Energy</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-pink-500 border border-white inline-block"></span> Khmer EV</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-cyan-500 border border-white inline-block"></span> Cam EV</div>
+        <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-slate-500 border border-white inline-block"></span> Other / Unspecified</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const INITIAL_MARKET_SITES = [];
+
+    const OUR_COMPETITION = [];
+
+    const PROVINCE_SUMMARY = [];
+
+    const REGION_VIEWS = {
+      CAMBODIA: { center: [11.85, 104.85], zoom: 8 },
+      PP: { center: [11.5564, 104.9282], zoom: 12 },
+      SHV: { center: [10.614, 103.529], zoom: 13 },
+      SR: { center: [13.3633, 103.8564], zoom: 13 }
+    };
+
+    let allSites = [...INITIAL_MARKET_SITES];
+    let compList = [...OUR_COMPETITION];
+    let savedFileMeta = null;
+    let activeTab = 'stations';
+    let measurePoints = [];
+    let measureLayer = null;
+
+    const DB_NAME = 'ChargePlusIntelDB';
+    const DB_STORE = 'datasets';
+    const DB_KEY = 'latestWorkbook';
+
+    function openIntelDB() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(DB_STORE)) {
+            db.createObjectStore(DB_STORE);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveDatasetToBrowser(sites, meta) {
+      const payload = { sites, meta };
+      try {
+        const db = await openIntelDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(DB_STORE, 'readwrite');
+          tx.objectStore(DB_STORE).put(payload, DB_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {
+        try {
+          localStorage.setItem(DB_KEY, JSON.stringify(payload));
+        } catch (lsErr) {
+          console.warn('Could not persist dataset:', lsErr);
+        }
+      }
+    }
+
+    async function loadDatasetFromBrowser() {
+      try {
+        const db = await openIntelDB();
+        const result = await new Promise((resolve, reject) => {
+          const tx = db.transaction(DB_STORE, 'readonly');
+          const req = tx.objectStore(DB_STORE).get(DB_KEY);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+        if (result && Array.isArray(result.sites) && result.sites.length > 0) {
+          return result;
+        }
+      } catch (e) {}
+      try {
+        const raw = localStorage.getItem(DB_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.sites) && parsed.sites.length > 0) {
+            return parsed;
+          }
+        }
+      } catch (lsErr) {}
+      return null;
+    }
+
+    async function clearSavedDatasetFromBrowser() {
+      try {
+        const db = await openIntelDB();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction(DB_STORE, 'readwrite');
+          tx.objectStore(DB_STORE).delete(DB_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+      try {
+        localStorage.removeItem(DB_KEY);
+      } catch (e) {}
+    }
+
+    if (typeof L === 'undefined') {
+      document.getElementById('map').innerHTML =
+        '<div class="h-full flex items-center justify-center p-6 text-center text-sm text-rose-300">Leaflet failed to load from unpkg.com. Check your internet connection or firewall/ad-blocker settings.</div>';
+      throw new Error('Leaflet (L) is not defined');
+    }
+
+    const map = L.map('map', { zoomControl: true }).setView([11.85, 104.85], 8);
+    measureLayer = L.layerGroup().addTo(map);
+
+    const satelliteImagery = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+        maxZoom: 19
+      }
+    );
+
+    const satelliteLabels = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: 'Labels &copy; Esri',
+        maxZoom: 19
+      }
+    );
+
+    const satelliteHybridGroup = L.layerGroup([satelliteImagery, satelliteLabels]);
+
+    const osmStreetTiles = L.tileLayer(
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }
+    );
+
+    let tileErrors = 0;
+    let usingFallback = false;
+    satelliteImagery.on('tileerror', () => {
+      tileErrors += 1;
+      if (!usingFallback && tileErrors >= 4) {
+        usingFallback = true;
+        map.removeLayer(satelliteHybridGroup);
+        osmStreetTiles.addTo(map);
+        document.getElementById('tile-notice').classList.remove('hidden');
+      }
+    });
+
+    satelliteHybridGroup.addTo(map);
+
+    L.control.layers(
+      {
+        '🛰️ Satellite + Labels': satelliteHybridGroup,
+        '🗺️ Street Map (OSM)': osmStreetTiles
+      },
+      null,
+      { position: 'topright' }
+    ).addTo(map);
+
+    const hasClusterPlugin = typeof L.markerClusterGroup === 'function';
+    const markerCluster = hasClusterPlugin ? L.markerClusterGroup({ maxClusterRadius: 42 }) : L.layerGroup();
+    const plainLayer = L.layerGroup();
+    const radiusLayer = L.layerGroup();
+
+    if (hasClusterPlugin) {
+      map.addLayer(markerCluster);
+    } else {
+      const clusterCheckbox = document.getElementById('toggle-cluster');
+      clusterCheckbox.checked = false;
+      clusterCheckbox.disabled = true;
+      map.addLayer(plainLayer);
+    }
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const toRad = d => (d * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function getEffectivePriceKhr(site) {
+      const raw = site && site.pr != null ? String(site.pr).trim() : '';
+      if (raw !== '') {
+        const lower = raw.toLowerCase();
+        if (lower === 'free' || lower === '0' || lower === '0 riel' || lower === '0 ៛' || lower === '$0' || lower === '$0.00') {
+          return 0;
+        }
+        // Check USD format like "$0.35" or "0.35 usd"
+        const usdMatch = raw.match(/\$\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:usd|\$)/i);
+        if (usdMatch) {
+          const usd = parseFloat(usdMatch[1] || usdMatch[2]);
+          if (Number.isFinite(usd)) return Math.round(usd * 4000);
+        }
+        // Check KHR format like "1,350" or "1350"
+        const numMatch = raw.replace(/,/g, '').match(/(\d+(?:\.\d+)?)/);
+        if (numMatch) {
+          const val = parseFloat(numMatch[1]);
+          if (Number.isFinite(val)) {
+            return val < 10 ? Math.round(val * 4000) : val;
+          }
+        }
+      }
+      const kw = Number(site && site.kw) || 0;
+      if (kw > 250) return 1450;
+      if (kw >= 30) return 1350;
+      return 1050;
+    }
+
+    function getTariffDisplay(site) {
+      if (site.pr && String(site.pr).trim() !== '') {
+        return escapeHtml(String(site.pr).trim());
+      }
+      const kw = Number(site.kw) || 0;
+      if (kw > 250) return '1,450 ៛/kWh (~$0.36 EAC ceiling)';
+      if (kw >= 30) return '1,350 ៛/kWh (~$0.34 EAC ceiling)';
+      return '1,050 ៛/kWh (~$0.26 EAC ceiling)';
+    }
+
+    function buildGoogleMapsUrl(site) {
+      if (site && site.u && String(site.u).trim() !== '') {
+        return String(site.u).trim();
+      }
+      if (site && Number.isFinite(Number(site.lat)) && Number.isFinite(Number(site.lng))) {
+        return `https://www.google.com/maps/search/?api=1&query=${Number(site.lat)},${Number(site.lng)}`;
+      }
+      return '';
+    }
+
+    function getNearestInfo(site, compLimit = 3) {
+      const lat = Number(site.lat);
+      const lng = Number(site.lng);
+      const isCP = site.cp === 1 || site.n === 'Charge+';
+
+      let bestCP = null;
+      const compCandidates = [];
+
+      allSites.forEach(other => {
+        if (other === site) return;
+        const oLat = Number(other.lat);
+        const oLng = Number(other.lng);
+        if (!Number.isFinite(oLat) || !Number.isFinite(oLng)) return;
+        const dist = haversineKm(lat, lng, oLat, oLng);
+        const otherIsCP = other.cp === 1 || other.n === 'Charge+';
+
+        if (otherIsCP) {
+          if (!bestCP || dist < bestCP.rawDist) {
+            bestCP = {
+              label: 'Nearest Charge+',
+              accentClass: 'text-emerald-400',
+              name: other.s,
+              network: other.n || 'Charge+',
+              kw: other.kw || 0,
+              price: getTariffDisplay(other),
+              mapsUrl: buildGoogleMapsUrl(other),
+              rawDist: dist,
+              dist: dist.toFixed(2)
+            };
+          }
+        } else {
+          compCandidates.push({
+            accentClass: 'text-sky-400',
+            name: other.s,
+            network: other.n || 'Unspecified',
+            kw: other.kw || 0,
+            price: getTariffDisplay(other),
+            mapsUrl: buildGoogleMapsUrl(other),
+            rawDist: dist,
+            dist: dist.toFixed(2)
+          });
+        }
+      });
+
+      compCandidates.sort((a, b) => a.rawDist - b.rawDist);
+      const topComps = compCandidates.slice(0, compLimit).map((item, idx) => ({
+        ...item,
+        label: `Nearest Competitor #${idx + 1}`
+      }));
+
+      // Fallback from OUR_COMPETITION if no competitor pins were matched in allSites
+      if (topComps.length === 0 && isCP) {
+        const sLower = site.s.toLowerCase();
+        const compMatch = compList.find(c => {
+          const cLower = c.s.toLowerCase();
+          return sLower.includes(cLower) || cLower.includes(sLower) ||
+                 (sLower.includes('le touk') && cLower.includes('anon hotel')) ||
+                 (sLower.includes('kob srov') && cLower.includes('kob srov'));
+        });
+        if (compMatch && compMatch.nc) {
+          topComps.push({
+            label: 'Nearest Competitor #1',
+            accentClass: 'text-sky-400',
+            name: compMatch.nc,
+            network: compMatch.nn,
+            kw: compMatch.nkw,
+            price: getTariffDisplay({ kw: compMatch.nkw, pr: '' }),
+            mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(compMatch.nc + ' Cambodia')}`,
+            dist: Number(compMatch.d).toFixed(2)
+          });
+        }
+      }
+
+      // Fallback from site.nc if no Charge+ pin was matched in allSites
+      if (!bestCP && !isCP && site.nc) {
+        const matchedCP = allSites.find(x => (x.cp === 1 || x.n === 'Charge+') && x.s.toLowerCase().includes(site.nc.toLowerCase()));
+        bestCP = {
+          label: 'Nearest Charge+',
+          accentClass: 'text-emerald-400',
+          name: site.nc,
+          network: 'Charge+',
+          kw: matchedCP ? matchedCP.kw : 0,
+          price: matchedCP ? getTariffDisplay(matchedCP) : '1,350 ៛/kWh (~$0.34 EAC ceiling)',
+          mapsUrl: matchedCP ? buildGoogleMapsUrl(matchedCP) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(site.nc + ' Cambodia')}`,
+          dist: site.d != null ? Number(site.d).toFixed(2) : '—'
+        };
+      }
+
+      return { bestCP, topComps };
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function getPinClass(network, isCP) {
+      if (isCP || network === 'Charge+') return 'pin-chargeplus';
+      if (network.includes('Unify')) return 'pin-unify';
+      if (network.includes('App Bank')) return 'pin-appbank';
+      if (network.includes('EV Energy')) return 'pin-evenergy';
+      if (network.includes('Khmer EV')) return 'pin-khmerev';
+      if (network.includes('Cam EV')) return 'pin-camev';
+      return 'pin-other';
+    }
+
+    const CHARGEPLUS_LOGO_URI = "data:image/jpeg;base64,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";
+
+    function createPinIcon(site) {
+      const isCP = site.cp === 1 || site.n === 'Charge+';
+      const labelMode = document.getElementById('label-mode').value;
+      const size = isCP ? 32 : (site.kw >= 150 ? 24 : 20);
+      const cls = getPinClass(site.n, isCP);
+      const bubbleText = isCP
+        ? `<img src="${CHARGEPLUS_LOGO_URI}" alt="Charge+" />`
+        : (site.kw >= 150 ? site.kw : '');
+
+      let subLabel = '';
+      if (labelMode === 'names') {
+        subLabel = `<div class="pin-label">${escapeHtml(site.s)}</div>`;
+      } else if (labelMode === 'power') {
+        subLabel = `<div class="pin-label">${site.kw || 0} kW${site.g ? ` • ${site.g}g` : ''}</div>`;
+      }
+
+      const anchorY = subLabel ? size / 2 + 8 : size / 2;
+      const iconW = subLabel ? 136 : size;
+      const iconH = subLabel ? size + 18 : size;
+
+      return L.divIcon({
+        className: '',
+        html: `<div class="custom-pin-wrap"><div class="custom-pin ${cls}" style="width:${size}px;height:${size}px;">${bubbleText}</div>${subLabel}</div>`,
+        iconSize: [iconW, iconH],
+        iconAnchor: [iconW / 2, anchorY]
+      });
+    }
+
+    function populateNetworkDropdown() {
+      const sel = document.getElementById('filter-network');
+      const currentVal = sel.value;
+      const cpCount = allSites.filter(s => s.cp === 1 || s.n === 'Charge+').length;
+      const compCount = allSites.length - cpCount;
+      const networks = Array.from(new Set(allSites.map(s => s.n).filter(n => n && n !== 'Charge+'))).sort();
+
+      sel.innerHTML = `
+        <option value="ALL">All Networks (${allSites.length})</option>
+        <option value="Charge+">⚡ Charge+ Only (${cpCount})</option>
+        <option value="COMPETITORS">🏢 Competitors Only (${compCount})</option>
+      `;
+      networks.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      if (Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    }
+
+    function populateProvinceDropdown() {
+      const provSet = new Set(allSites.map(s => s.p).filter(Boolean));
+      const sel = document.getElementById('filter-province');
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="ALL">All Provinces (' + provSet.size + ')</option>';
+      Array.from(provSet).sort().forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        sel.appendChild(opt);
+      });
+      if (Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    }
+
+    function populatePriceDropdown() {
+      const sel = document.getElementById('filter-price');
+      if (!sel) return;
+      const currentVal = sel.value;
+      const explicitPrices = Array.from(
+        new Set(allSites.map(s => (s.pr ? String(s.pr).trim() : '')).filter(Boolean))
+      ).sort();
+
+      sel.innerHTML = `
+        <option value="ALL">All Prices / Tariffs</option>
+        <option value="FREE">🎁 Free (0 ៛)</option>
+        <option value="MAX_1050">💵 ≤ 1,050 ៛/kWh (~$0.26 AC)</option>
+        <option value="MAX_1350">💵 ≤ 1,350 ៛/kWh (~$0.34 DC)</option>
+        <option value="MAX_1450">💵 ≤ 1,450 ៛/kWh (~$0.36 Ultra-Fast)</option>
+        <option value="EQ_1050">• 1,050 ៛/kWh (AC ≤ 22 kW)</option>
+        <option value="EQ_1350">• 1,350 ៛/kWh (DC 30–250 kW)</option>
+        <option value="EQ_1450">• 1,450 ៛/kWh (HPC &gt; 250 kW)</option>
+      `;
+
+      explicitPrices.forEach(pr => {
+        const opt = document.createElement('option');
+        opt.value = 'RAW:' + pr;
+        opt.textContent = '🏷️ ' + pr;
+        sel.appendChild(opt);
+      });
+
+      if (Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    }
+
+    function rebuildDerivedSummaries() {
+      // Rebuild province summary from allSites
+      const provMap = new Map();
+      allSites.forEach(s => {
+        const p = s.p || 'Unspecified';
+        if (!provMap.has(p)) {
+          provMap.set(p, { p, all: 0, cp: 0, comp: 0, hpc: 0, netCounts: {} });
+        }
+        const entry = provMap.get(p);
+        entry.all += 1;
+        const isCP = s.cp === 1 || s.n === 'Charge+';
+        if (isCP) entry.cp += 1;
+        else {
+          entry.comp += 1;
+          const netName = s.n || 'Unspecified';
+          entry.netCounts[netName] = (entry.netCounts[netName] || 0) + 1;
+        }
+        if ((Number(s.kw) || 0) >= 150) entry.hpc += 1;
+      });
+
+      PROVINCE_SUMMARY.length = 0;
+      Array.from(provMap.values())
+        .sort((a, b) => b.all - a.all)
+        .forEach(entry => {
+          const topPair = Object.entries(entry.netCounts).sort((a, b) => b[1] - a[1])[0];
+          PROVINCE_SUMMARY.push({
+            p: entry.p,
+            all: entry.all,
+            cp: entry.cp,
+            comp: entry.comp,
+            hpc: entry.hpc,
+            top: topPair ? `${topPair[0]} (${topPair[1]})` : (entry.cp ? `Charge+ (${entry.cp})` : '—')
+          });
+        });
+
+      // Rebuild Our Rivals summary for Charge+ stations if compList is empty
+      if (compList.length === 0) {
+        const cpSites = allSites.filter(s => s.cp === 1 || s.n === 'Charge+');
+        const competitors = allSites.filter(s => !(s.cp === 1 || s.n === 'Charge+'));
+        cpSites.forEach(cp => {
+          let c1 = 0, c2 = 0, c5 = 0, f2 = 0;
+          let nearest = null;
+          competitors.forEach(comp => {
+            const dist = haversineKm(Number(cp.lat), Number(cp.lng), Number(comp.lat), Number(comp.lng));
+            if (dist <= 1) c1 += 1;
+            if (dist <= 2) {
+              c2 += 1;
+              if ((Number(comp.kw) || 0) > f2) f2 = Number(comp.kw) || 0;
+            }
+            if (dist <= 5) c5 += 1;
+            if (!nearest || dist < nearest.dist) nearest = { site: comp, dist };
+          });
+          compList.push({
+            s: cp.s,
+            st: 'active',
+            p: cp.p,
+            kw: cp.kw || 0,
+            c1, c2, c5,
+            nc: nearest ? nearest.site.s : 'None',
+            nn: nearest ? nearest.site.n : '—',
+            nkw: nearest ? (nearest.site.kw || 0) : 0,
+            d: nearest ? Number(nearest.dist.toFixed(2)) : 0,
+            f2,
+            fr: f2 > (cp.kw || 0) ? 'Yes' : 'No'
+          });
+        });
+      }
+    }
+
+    function updateKPIs() {
+      rebuildDerivedSummaries();
+      const total = allSites.length;
+      const cpCount = allSites.filter(s => s.cp === 1 || s.n === 'Charge+').length;
+      const hpcCount = allSites.filter(s => s.kw >= 150).length;
+      const provCount = new Set(allSites.map(s => s.p).filter(Boolean)).size;
+      const share = total ? ((cpCount / total) * 100).toFixed(1) : '0.0';
+
+      document.getElementById('kpi-total').textContent = total;
+      document.getElementById('kpi-cp').textContent = `${cpCount} (${share}%)`;
+      document.getElementById('kpi-hpc').textContent = hpcCount;
+      document.getElementById('kpi-prov').textContent = provCount;
+      document.getElementById('tab-stations').textContent = `All Sites (${total})`;
+      document.getElementById('tab-comp').textContent = `Our Rivals (${compList.length})`;
+      document.getElementById('tab-prov').textContent = `Provinces (${PROVINCE_SUMMARY.length})`;
+
+      const sub = document.getElementById('header-subtitle');
+      const clearBtn = document.getElementById('btn-clear-saved');
+      const clearBtnMobile = document.getElementById('btn-clear-saved-mobile');
+      if (sub) {
+        if (total > 0 && savedFileMeta) {
+          sub.textContent = `${total} Stations • Saved: ${savedFileMeta.fileName} (${savedFileMeta.savedAt})`;
+        } else if (total > 0) {
+          sub.textContent = `${total} Mapped Stations • Competitor Proximity & Provincial Coverage`;
+        } else {
+          sub.textContent = '0 Mapped Stations • Load an .xlsx file once (auto-saved in browser)';
+        }
+      }
+      const hasSaved = total > 0 && !!savedFileMeta;
+      if (clearBtn) clearBtn.classList.toggle('hidden', !hasSaved);
+      if (clearBtnMobile) clearBtnMobile.classList.toggle('hidden', !hasSaved);
+    }
+
+    function getFilteredSites() {
+      const q = document.getElementById('search-input').value.toLowerCase().trim();
+      const net = document.getElementById('filter-network').value;
+      const prov = document.getElementById('filter-province').value;
+      const minKw = parseFloat(document.getElementById('filter-power').value) || 0;
+      const conn = document.getElementById('filter-connector').value;
+      const priceFilter = document.getElementById('filter-price') ? document.getElementById('filter-price').value : 'ALL';
+
+      return allSites.filter(s => {
+        const isCP = s.cp === 1 || s.n === 'Charge+';
+        if (net === 'Charge+' && !isCP) return false;
+        if (net === 'COMPETITORS' && isCP) return false;
+        if (net !== 'ALL' && net !== 'Charge+' && net !== 'COMPETITORS' && s.n !== net) return false;
+        if (prov !== 'ALL' && s.p !== prov) return false;
+        if (s.kw < minKw) return false;
+        if (conn !== 'ALL' && !s.c.includes(conn)) return false;
+
+        if (priceFilter !== 'ALL') {
+          const effKhr = getEffectivePriceKhr(s);
+          if (priceFilter === 'FREE' && effKhr !== 0) return false;
+          if (priceFilter === 'MAX_1050' && effKhr > 1050) return false;
+          if (priceFilter === 'MAX_1350' && effKhr > 1350) return false;
+          if (priceFilter === 'MAX_1450' && effKhr > 1450) return false;
+          if (priceFilter === 'EQ_1050' && effKhr !== 1050) return false;
+          if (priceFilter === 'EQ_1350' && effKhr !== 1350) return false;
+          if (priceFilter === 'EQ_1450' && effKhr !== 1450) return false;
+          if (priceFilter.startsWith('RAW:')) {
+            const targetRaw = priceFilter.slice(4);
+            if (String(s.pr || '').trim() !== targetRaw) return false;
+          }
+        }
+
+        if (q && !(s.s.toLowerCase().includes(q) || s.n.toLowerCase().includes(q) || s.p.toLowerCase().includes(q))) return false;
+        return true;
+      });
+    }
+
+    function addMeasurePoint(latlng, label) {
+      if (!document.getElementById('toggle-measure').checked) return false;
+      if (measurePoints.length >= 2) {
+        measurePoints = [];
+        measureLayer.clearLayers();
+      }
+      measurePoints.push({ latlng, label });
+      L.circleMarker(latlng, {
+        radius: 6,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#10b981',
+        fillOpacity: 1
+      }).addTo(measureLayer);
+
+      if (measurePoints.length === 1) {
+        document.getElementById('measure-text').textContent = `Point A set (${label || 'Map point'}). Click second point or station.`;
+      } else if (measurePoints.length === 2) {
+        const [p1, p2] = measurePoints;
+        const distKm = (p1.latlng.distanceTo(p2.latlng) / 1000).toFixed(2);
+        L.polyline([p1.latlng, p2.latlng], {
+          color: '#34d399',
+          weight: 3,
+          dashArray: '6, 6'
+        }).addTo(measureLayer);
+        document.getElementById('measure-text').textContent = `Distance: ${distKm} km (${p1.label || 'Pt A'} → ${p2.label || 'Pt B'})`;
+      }
+      return true;
+    }
+
+    function renderMapAndSidebar() {
+      const filtered = getFilteredSites();
+      const useCluster = hasClusterPlugin && document.getElementById('toggle-cluster').checked;
+      const showRadius = document.getElementById('toggle-radius').checked;
+      const radiusMeters = (Number(document.getElementById('radius-km').value) || 2) * 1000;
+
+      markerCluster.clearLayers();
+      plainLayer.clearLayers();
+      radiusLayer.clearLayers();
+
+      filtered.forEach(site => {
+        const lat = Number(site.lat);
+        const lng = Number(site.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const isCP = site.cp === 1 || site.n === 'Charge+';
+        const marker = L.marker([lat, lng], { icon: createPinIcon(site) });
+
+        marker.bindTooltip(
+          `<b>${escapeHtml(site.s)}</b><br/>${escapeHtml(site.n)} • ${site.kw || 0} kW${site.g ? ` • ${site.g} guns` : ''}`,
+          { direction: 'top', offset: [0, -10] }
+        );
+
+        const siteTariff = getTariffDisplay(site);
+        const { bestCP, topComps } = getNearestInfo(site);
+        const renderNearestCard = (item) => {
+          if (!item) return '';
+          const linkHtml = item.mapsUrl
+            ? `<div class="pt-1 border-t border-slate-800/90 flex justify-end">
+                <a href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener noreferrer" class="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline">Open in Google Maps ↗</a>
+              </div>`
+            : '';
+          return `<div class="bg-slate-900/80 border border-slate-700/80 rounded-lg p-2 space-y-1 text-[11px]">
+              <div class="flex items-center justify-between gap-2">
+                <span class="uppercase tracking-wider text-[10px] font-bold ${item.accentClass}">${item.label}</span>
+                <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-semibold">${item.dist} km away</span>
+              </div>
+              <div class="font-semibold text-white leading-snug">${escapeHtml(item.name)}</div>
+              <div class="text-slate-400 text-[10px]">${escapeHtml(item.network)}</div>
+              <div class="flex items-center justify-between gap-2 text-slate-200 pt-0.5">
+                <span>⚡ <b>${item.kw ? item.kw + ' kW' : 'N/A'}</b></span>
+                <span>💵 <b>${item.price}</b></span>
+              </div>
+              ${linkHtml}
+            </div>`;
+        };
+
+        const cpCardHtml = renderNearestCard(bestCP);
+        const compCardsHtml = topComps.map(c => renderNearestCard(c)).join('');
+        const orderedCards = [cpCardHtml, compCardsHtml].filter(Boolean).join('');
+
+        const nearestBlock = orderedCards
+          ? `<div class="mt-2.5 pt-2 border-t border-slate-700/90 space-y-2 max-h-[270px] overflow-y-auto pr-1">${orderedCards}</div>`
+          : '';
+        const siteMapUrl = buildGoogleMapsUrl(site);
+        const mapBtn = siteMapUrl
+          ? `<a href="${escapeHtml(siteMapUrl)}" target="_blank" rel="noopener noreferrer" class="inline-block mt-2.5 w-full text-center px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 !text-white rounded-lg text-[11px] font-semibold">Open Station in Google Maps ↗</a>`
+          : '';
+
+        marker.bindPopup(`
+          <div class="min-w-[225px] max-w-[80vw] sm:min-w-[265px] sm:max-w-[300px] text-xs">
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <span class="px-2 py-0.5 rounded font-semibold ${isCP ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'}">${escapeHtml(site.n)}</span>
+              <span class="font-bold text-amber-400">${site.kw} kW</span>
+            </div>
+            <div class="font-bold text-sm text-white leading-snug mb-1.5">${escapeHtml(site.s)}</div>
+            <div class="text-slate-300 space-y-0.5">
+              <div>📍 ${escapeHtml(site.p)}</div>
+              <div>🔌 ${escapeHtml(site.c)} ${site.g ? `(${site.g} guns)` : ''}</div>
+              <div>💵 ${siteTariff}</div>
+              <div>🕒 ${escapeHtml(site.h)}</div>
+            </div>
+            ${nearestBlock}
+            ${mapBtn}
+          </div>
+        `, { maxWidth: 320 });
+
+        marker.on('click', () => {
+          if (addMeasurePoint(L.latLng(lat, lng), site.s)) {
+            marker.closePopup();
+            return;
+          }
+          const targetZoom = Math.max(map.getZoom(), 16);
+          map.setView([lat, lng], targetZoom, { animate: true });
+        });
+
+        if (useCluster) markerCluster.addLayer(marker);
+        else plainLayer.addLayer(marker);
+
+        if (isCP && showRadius) {
+          L.circle([lat, lng], {
+            radius: radiusMeters,
+            color: '#10b981',
+            weight: 1.5,
+            fillColor: '#10b981',
+            fillOpacity: 0.12
+          }).addTo(radiusLayer);
+        }
+      });
+
+      if (useCluster) {
+        map.removeLayer(plainLayer);
+        map.addLayer(markerCluster);
+      } else {
+        map.removeLayer(markerCluster);
+        map.addLayer(plainLayer);
+      }
+
+      if (showRadius) map.addLayer(radiusLayer);
+      else map.removeLayer(radiusLayer);
+
+      renderSidebarContent(filtered);
+    }
+
+    function renderSidebarContent(filtered) {
+      const container = document.getElementById('sidebar-list');
+      container.innerHTML = '';
+
+      if (activeTab === 'stations') {
+        if (filtered.length === 0) {
+          container.innerHTML = `
+            <div class="p-6 text-center space-y-2">
+              <div class="text-2xl">📍</div>
+              <div class="text-xs font-semibold text-slate-200">${allSites.length === 0 ? 'No stations loaded yet' : 'No matching stations'}</div>
+              <div class="text-[11px] text-slate-400 leading-relaxed">
+                ${allSites.length === 0
+                  ? 'Click <span class="text-emerald-400 font-semibold">📂 Load .xlsx</span> in the top right to import your Market Sites workbook.'
+                  : 'Try clearing your search or resetting the active filters.'}
+              </div>
+            </div>`;
+          return;
+        }
+        filtered.slice(0, 150).forEach(site => {
+          const isCP = site.cp === 1 || site.n === 'Charge+';
+          const div = document.createElement('div');
+          div.className = 'p-3 hover:bg-slate-800/70 cursor-pointer transition';
+          div.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-semibold text-xs text-white leading-snug">${escapeHtml(site.s)}</div>
+              <span class="shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded ${site.kw >= 150 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-slate-300'}">${site.kw} kW</span>
+            </div>
+            <div class="flex items-center justify-between mt-1.5 text-[11px]">
+              <span class="${isCP ? 'text-emerald-400 font-semibold' : 'text-sky-400'}">${escapeHtml(site.n)}</span>
+              <span class="text-slate-400">${escapeHtml(site.p)}</span>
+            </div>
+          `;
+          div.onclick = () => {
+            const lat = Number(site.lat);
+            const lng = Number(site.lng);
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              closeMobileSidebar();
+              map.setView([lat, lng], 16);
+              if (document.getElementById('toggle-measure').checked) {
+                addMeasurePoint(L.latLng(lat, lng), site.s);
+              }
+            }
+          };
+          container.appendChild(div);
+        });
+      } else if (activeTab === 'comp') {
+        if (compList.length === 0) {
+          container.innerHTML = `
+            <div class="p-6 text-center space-y-2">
+              <div class="text-2xl">🏢</div>
+              <div class="text-xs font-semibold text-slate-200">No competitor analysis yet</div>
+              <div class="text-[11px] text-slate-400">Load an .xlsx workbook with station coordinates to compute rival proximity.</div>
+            </div>`;
+          return;
+        }
+        compList.forEach(item => {
+          const highAlert = item.d < 0.5 || item.c2 >= 5;
+          const matchedSite = allSites.find(s => (s.cp === 1 || s.n === 'Charge+') && s.s === item.s);
+          const top3 = matchedSite ? getNearestInfo(matchedSite).topComps : [];
+          const top3Html = top3.length
+            ? top3.map((c, i) => `
+                <div class="flex items-center justify-between gap-2 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80">
+                  <div class="truncate">
+                    <span class="text-sky-400 font-semibold">#${i + 1}</span>
+                    <span class="text-amber-300">${escapeHtml(c.name)}</span>
+                    <span class="text-slate-400">(${escapeHtml(c.network)}, ${c.kw} kW, <b>${c.dist} km</b>)</span>
+                  </div>
+                  ${c.mapsUrl ? `<a href="${escapeHtml(c.mapsUrl)}" target="_blank" rel="noopener noreferrer" class="shrink-0 text-[10px] font-semibold text-emerald-400 hover:underline">Map ↗</a>` : ''}
+                </div>
+              `).join('')
+            : `<div class="text-[11px] text-slate-300 mt-1.5">Nearest: <span class="text-amber-300">${escapeHtml(item.nc)}</span> (${escapeHtml(item.nn)}, ${item.nkw} kW, <b>${item.d} km</b>)</div>`;
+
+          const div = document.createElement('div');
+          div.className = 'p-3 hover:bg-slate-800/70 transition';
+          div.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-semibold text-xs text-white">${escapeHtml(item.s)}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold ${item.st === 'active' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">${escapeHtml(item.st)}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(item.p)} • Ours: <b class="text-white">${item.kw} kW</b></div>
+            <div class="grid grid-cols-3 gap-1 mt-2 text-center text-[11px] bg-slate-800/80 rounded p-1.5">
+              <div><span class="text-slate-400">≤1km:</span> <b class="text-white">${item.c1}</b></div>
+              <div><span class="text-slate-400">≤2km:</span> <b class="${highAlert ? 'text-rose-400' : 'text-white'}">${item.c2}</b></div>
+              <div><span class="text-slate-400">≤5km:</span> <b class="text-white">${item.c5}</b></div>
+            </div>
+            <div class="mt-2 space-y-1">${top3Html}</div>
+          `;
+          container.appendChild(div);
+        });
+      } else if (activeTab === 'prov') {
+        if (PROVINCE_SUMMARY.length === 0) {
+          container.innerHTML = `
+            <div class="p-6 text-center space-y-2">
+              <div class="text-2xl">🗺️</div>
+              <div class="text-xs font-semibold text-slate-200">No provincial breakdown yet</div>
+              <div class="text-[11px] text-slate-400">Load an .xlsx workbook to generate provincial coverage counts.</div>
+            </div>`;
+          return;
+        }
+        PROVINCE_SUMMARY.forEach(row => {
+          const isGap = row.cp === 0;
+          const div = document.createElement('div');
+          div.className = 'p-3 hover:bg-slate-800/70 cursor-pointer transition';
+          div.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-xs text-white">${escapeHtml(row.p)}</span>
+              ${isGap
+                ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold">0 Charge+ (White Space)</span>'
+                : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">${row.cp} Charge+</span>`}
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+              <span>Total: <b class="text-white">${row.all}</b> (${row.hpc} ≥150kW)</span>
+              <span>Top: ${escapeHtml(row.top)}</span>
+            </div>
+          `;
+          div.onclick = () => {
+            document.getElementById('filter-province').value = row.p;
+            switchTab('stations');
+            renderMapAndSidebar();
+          };
+          container.appendChild(div);
+        });
+      }
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      ['stations', 'comp', 'prov'].forEach(t => {
+        const btn = document.getElementById('tab-' + t);
+        if (t === tab) {
+          btn.className = 'py-2.5 text-emerald-400 border-b-2 border-emerald-400 bg-slate-800/40';
+        } else {
+          btn.className = 'py-2.5 text-slate-400 hover:text-white';
+        }
+      });
+      document.getElementById('filters-panel').style.display = tab === 'stations' ? 'block' : 'none';
+      renderSidebarContent(getFilteredSites());
+      setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    function buildExportRows() {
+      const rows = getFilteredSites();
+      return rows.map(r => {
+        const isCP = r.cp === 1 || r.n === 'Charge+';
+        const { bestCP, topComps } = getNearestInfo(r);
+        const [c1, c2, c3] = topComps;
+        return {
+          'Station': r.s,
+          'Network': r.n,
+          'Type': isCP ? 'Charge+' : 'Competitor',
+          'Province': r.p,
+          'Max kW': r.kw || 0,
+          'Guns': r.g || 0,
+          'Connector': r.c,
+          'Tariff': getTariffDisplay(r).replace(/<[^>]+>/g, ''),
+          'Hours': r.h,
+          'Nearest Charge+': bestCP ? bestCP.name : '',
+          'Nearest Charge+ kW': bestCP ? (bestCP.kw || 0) : '',
+          'Nearest Charge+ Dist (km)': bestCP ? bestCP.dist : '',
+          'Nearest Charge+ Maps': bestCP ? bestCP.mapsUrl : '',
+          'Nearest Competitor #1': c1 ? c1.name : '',
+          'Competitor #1 Network': c1 ? c1.network : '',
+          'Competitor #1 kW': c1 ? (c1.kw || 0) : '',
+          'Competitor #1 Dist (km)': c1 ? c1.dist : '',
+          'Competitor #1 Maps': c1 ? c1.mapsUrl : '',
+          'Nearest Competitor #2': c2 ? c2.name : '',
+          'Competitor #2 Network': c2 ? c2.network : '',
+          'Competitor #2 kW': c2 ? (c2.kw || 0) : '',
+          'Competitor #2 Dist (km)': c2 ? c2.dist : '',
+          'Competitor #2 Maps': c2 ? c2.mapsUrl : '',
+          'Nearest Competitor #3': c3 ? c3.name : '',
+          'Competitor #3 Network': c3 ? c3.network : '',
+          'Competitor #3 kW': c3 ? (c3.kw || 0) : '',
+          'Competitor #3 Dist (km)': c3 ? c3.dist : '',
+          'Competitor #3 Maps': c3 ? c3.mapsUrl : '',
+          'Lat': r.lat,
+          'Lng': r.lng,
+          'Maps Link': buildGoogleMapsUrl(r)
+        };
+      });
+    }
+
+    function exportStationList() {
+      const format = document.getElementById('export-format')?.value || 'csv';
+      const records = buildExportRows();
+      if (!records.length) return;
+
+      const headers = Object.keys(records[0]);
+      const stamp = new Date().toISOString().slice(0, 10);
+
+      if (format === 'xlsx' && typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(records, { header: headers });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Filtered Stations');
+        XLSX.writeFile(wb, `chargeplus-stations-${stamp}.xlsx`);
+        return;
+      }
+
+      const csvLines = [headers.join(',')];
+      records.forEach(rec => {
+        const vals = headers.map(h => {
+          const str = String(rec[h] ?? '').replace(/"/g, '""');
+          return `"${str}"`;
+        });
+        csvLines.push(vals.join(','));
+      });
+      const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `chargeplus-stations-${stamp}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function handleExcelFileChange(e) {
+      const file = e.target.files[0];
+      if (!file || typeof XLSX === 'undefined') return;
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          if (wb.Sheets['Market Sites']) {
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets['Market Sites'], { range: 3 });
+            const parsed = rows
+              .filter(r => Number.isFinite(Number(r['Lat'])) && Number.isFinite(Number(r['Lng'])))
+              .map(r => ({
+                s: String(r['Station'] || '').trim(),
+                n: String(r['Network'] || 'Unspecified').trim(),
+                p: String(r['Province'] || '').trim(),
+                kw: Number(r['Max kW']) || 0,
+                g: Number(r['Guns']) || 0,
+                c: String(r['Connector'] || 'Unknown').trim(),
+                h: String(r['24/7'] || 'Unknown').trim(),
+                cp: String(r['Charge+?'] || '').trim() === 'Yes' ? 1 : 0,
+                pr: String(r['Price'] || r['Tariff'] || r['Rate'] || '').trim(),
+                nc: String(r['Nearest Charge+'] || '').trim(),
+                d: r['Distance km'] != null && Number.isFinite(Number(r['Distance km'])) ? Number(Number(r['Distance km']).toFixed(2)) : null,
+                lat: Number(r['Lat']),
+                lng: Number(r['Lng']),
+                u: String(r['Maps link'] || '').trim()
+              }));
+            if (parsed.length > 0) {
+              allSites = parsed;
+              compList = [];
+              const nowStr = new Date().toLocaleString([], {
+                year: 'numeric', month: 'short', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+              });
+              savedFileMeta = { fileName: file.name, savedAt: nowStr };
+              saveDatasetToBrowser(allSites, savedFileMeta);
+              populateProvinceDropdown();
+              populateNetworkDropdown();
+              populatePriceDropdown();
+              updateKPIs();
+              renderMapAndSidebar();
+              const bounds = L.latLngBounds(allSites.map(s => [s.lat, s.lng]));
+              if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [30, 30] });
+              }
+              map.invalidateSize();
+            }
+          }
+        } catch (err) {
+          console.error('Failed to parse Excel workbook:', err);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    document.getElementById('excel-upload').addEventListener('change', handleExcelFileChange);
+    const mobileExcelInput = document.getElementById('excel-upload-mobile');
+    if (mobileExcelInput) mobileExcelInput.addEventListener('change', handleExcelFileChange);
+
+    // Mobile & Tablet Drawer / Tools / Legend Controls
+    const sidebarDrawer = document.getElementById('sidebar-drawer');
+    const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+    function openMobileSidebar() {
+      sidebarDrawer.classList.remove('mobile-drawer-closed');
+      sidebarDrawer.classList.add('mobile-drawer-open');
+      sidebarBackdrop.classList.remove('hidden');
+    }
+
+    function closeMobileSidebar() {
+      sidebarDrawer.classList.add('mobile-drawer-closed');
+      sidebarDrawer.classList.remove('mobile-drawer-open');
+      sidebarBackdrop.classList.add('hidden');
+      setTimeout(() => map.invalidateSize(), 220);
+    }
+
+    document.getElementById('btn-toggle-sidebar').onclick = () => {
+      if (sidebarDrawer.classList.contains('mobile-drawer-open')) closeMobileSidebar();
+      else openMobileSidebar();
+    };
+    document.getElementById('btn-close-sidebar').onclick = closeMobileSidebar;
+    document.getElementById('btn-floating-sites').onclick = openMobileSidebar;
+    sidebarBackdrop.onclick = closeMobileSidebar;
+
+    document.getElementById('btn-toggle-tools').onclick = () => {
+      const tools = document.getElementById('header-tools');
+      tools.classList.toggle('hidden');
+      tools.classList.toggle('flex');
+      setTimeout(() => map.invalidateSize(), 60);
+    };
+
+    document.getElementById('btn-toggle-legend').onclick = () => {
+      const body = document.getElementById('legend-body');
+      const chev = document.getElementById('legend-chevron');
+      const isHidden = body.classList.contains('hidden');
+      if (isHidden) {
+        body.classList.remove('hidden');
+        chev.textContent = '▼';
+      } else {
+        body.classList.add('hidden');
+        chev.textContent = '▲';
+      }
+    };
+
+    ['search-input', 'filter-network', 'filter-province', 'filter-power', 'filter-connector', 'filter-price', 'toggle-cluster', 'toggle-radius', 'radius-km', 'label-mode'].forEach(id => {
+      document.getElementById(id).addEventListener('input', renderMapAndSidebar);
+      document.getElementById(id).addEventListener('change', renderMapAndSidebar);
+    });
+
+    document.getElementById('focus-region').addEventListener('change', function (e) {
+      const view = REGION_VIEWS[e.target.value];
+      if (view) {
+        map.setView(view.center, view.zoom);
+      }
+    });
+
+    document.getElementById('toggle-measure').addEventListener('change', function (e) {
+      const banner = document.getElementById('measure-banner');
+      if (e.target.checked) {
+        banner.classList.remove('hidden');
+        document.getElementById('measure-text').textContent = 'Click two points or stations on the map to measure distance.';
+      } else {
+        banner.classList.add('hidden');
+        measurePoints = [];
+        measureLayer.clearLayers();
+      }
+    });
+
+    document.getElementById('btn-clear-measure').onclick = () => {
+      measurePoints = [];
+      measureLayer.clearLayers();
+      document.getElementById('measure-text').textContent = 'Click two points or stations on the map to measure distance.';
+    };
+
+    map.on('click', function (e) {
+      addMeasurePoint(e.latlng, `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+    });
+
+    // Current GPS Location Tracking
+    let userLocationMarker = null;
+    let userAccuracyCircle = null;
+    let geoWatchId = null;
+    let shouldCenterNextFix = false;
+
+    function buildUserLocationPopup(lat, lng, accuracy) {
+      const dummySite = { lat, lng, cp: 0, n: 'My Location', s: 'My Current Location' };
+      const { bestCP, topComps } = getNearestInfo(dummySite, 5);
+
+      const renderLocCard = (item) => {
+        if (!item) return '';
+        const linkHtml = item.mapsUrl
+          ? `<div class="pt-1 border-t border-slate-800/90 flex justify-end">
+              <a href="${escapeHtml(item.mapsUrl)}" target="_blank" rel="noopener noreferrer" class="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline">Open in Google Maps ↗</a>
+            </div>`
+          : '';
+        return `<div class="bg-slate-900/80 border border-slate-700/80 rounded-lg p-2 space-y-1 text-[11px]">
+            <div class="flex items-center justify-between gap-2">
+              <span class="uppercase tracking-wider text-[10px] font-bold ${item.accentClass}">${item.label}</span>
+              <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 font-semibold">${item.dist} km away</span>
+            </div>
+            <div class="font-semibold text-white leading-snug">${escapeHtml(item.name)}</div>
+            <div class="text-slate-400 text-[10px]">${escapeHtml(item.network)}</div>
+            <div class="flex items-center justify-between gap-2 text-slate-200 pt-0.5">
+              <span>⚡ <b>${item.kw ? item.kw + ' kW' : 'N/A'}</b></span>
+              <span>💵 <b>${item.price}</b></span>
+            </div>
+            ${linkHtml}
+          </div>`;
+      };
+
+      const cardsHtml = [renderLocCard(bestCP), ...topComps.map(c => renderLocCard(c))]
+        .filter(Boolean)
+        .join('');
+
+      const myMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+      return `
+        <div class="min-w-[235px] max-w-[82vw] sm:min-w-[275px] sm:max-w-[310px] text-xs">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="px-2 py-0.5 rounded font-semibold bg-blue-500/20 text-blue-300">📍 Your Location</span>
+            <span class="text-[10px] text-slate-400">±${Math.round(accuracy)} m</span>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-300">
+            <span>${lat.toFixed(5)}, ${lng.toFixed(5)}</span>
+            <a href="${myMapsUrl}" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline">My Pin ↗</a>
+          </div>
+          <div class="mt-2 pt-2 border-t border-slate-700/90 space-y-2 max-h-[290px] overflow-y-auto pr-1">
+            ${cardsHtml || '<div class="text-[11px] text-slate-400">Load an .xlsx file to see nearby stations.</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function updateUserLocationOnMap(pos) {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      const latlng = L.latLng(lat, lng);
+
+      if (!userLocationMarker) {
+        const gpsIcon = L.divIcon({
+          className: '',
+          html: '<div class="user-gps-dot"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        });
+        userLocationMarker = L.marker(latlng, { icon: gpsIcon, zIndexOffset: 1000 }).addTo(map);
+        userLocationMarker.on('click', () => {
+          if (addMeasurePoint(userLocationMarker.getLatLng(), 'My Location')) {
+            userLocationMarker.closePopup();
+          }
+        });
+      } else {
+        userLocationMarker.setLatLng(latlng);
+      }
+
+      if (!userAccuracyCircle) {
+        userAccuracyCircle = L.circle(latlng, {
+          radius: accuracy,
+          color: '#3b82f6',
+          weight: 1,
+          fillColor: '#3b82f6',
+          fillOpacity: 0.12
+        }).addTo(map);
+      } else {
+        userAccuracyCircle.setLatLng(latlng);
+        userAccuracyCircle.setRadius(accuracy);
+      }
+
+      userLocationMarker.bindPopup(buildUserLocationPopup(lat, lng, accuracy), { maxWidth: 330 });
+
+      const btn = document.getElementById('btn-locate-me');
+      const label = document.getElementById('locate-me-label');
+      btn.classList.remove('text-sky-400');
+      btn.classList.add('text-blue-300', 'border-blue-500/60');
+      label.textContent = 'Live GPS';
+
+      if (shouldCenterNextFix) {
+        shouldCenterNextFix = false;
+        map.setView(latlng, Math.max(map.getZoom(), 15), { animate: true });
+        userLocationMarker.openPopup();
+      }
+    }
+
+    function handleGeoError(err) {
+      const label = document.getElementById('locate-me-label');
+      label.textContent = 'My Location';
+      shouldCenterNextFix = false;
+      const reasons = {
+        1: 'Location permission denied. Enable location access in your browser settings.',
+        2: 'GPS position unavailable right now.',
+        3: 'Location request timed out. Try again outdoors or check GPS.'
+      };
+      alert(reasons[err.code] || 'Unable to retrieve your location.');
+    }
+
+    document.getElementById('btn-locate-me').onclick = () => {
+      if (!('geolocation' in navigator)) {
+        alert('Geolocation is not supported by this browser.');
+        return;
+      }
+      shouldCenterNextFix = true;
+      document.getElementById('locate-me-label').textContent = 'Locating...';
+
+      if (userLocationMarker) {
+        const ll = userLocationMarker.getLatLng();
+        map.setView(ll, Math.max(map.getZoom(), 15), { animate: true });
+        userLocationMarker.openPopup();
+      }
+
+      if (geoWatchId === null) {
+        geoWatchId = navigator.geolocation.watchPosition(
+          updateUserLocationOnMap,
+          handleGeoError,
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 }
+        );
+      }
+    };
+
+    document.getElementById('btn-export-list').onclick = exportStationList;
+
+    document.getElementById('btn-reset').onclick = () => {
+      document.getElementById('search-input').value = '';
+      document.getElementById('filter-network').value = 'ALL';
+      document.getElementById('filter-province').value = 'ALL';
+      document.getElementById('filter-power').value = '0';
+      document.getElementById('filter-connector').value = 'ALL';
+      document.getElementById('filter-price').value = 'ALL';
+      document.getElementById('radius-km').value = '2';
+      document.getElementById('label-mode').value = 'compact';
+      document.getElementById('focus-region').value = 'CAMBODIA';
+      map.setView(REGION_VIEWS.CAMBODIA.center, REGION_VIEWS.CAMBODIA.zoom);
+      renderMapAndSidebar();
+    };
+
+    document.getElementById('tab-stations').onclick = () => switchTab('stations');
+    document.getElementById('tab-comp').onclick = () => switchTab('comp');
+    document.getElementById('tab-prov').onclick = () => switchTab('prov');
+
+    window.addEventListener('resize', () => map.invalidateSize());
+
+    async function handleClearSaved() {
+      await clearSavedDatasetFromBrowser();
+      allSites = [];
+      compList = [];
+      savedFileMeta = null;
+      document.getElementById('excel-upload').value = '';
+      const mobIn = document.getElementById('excel-upload-mobile');
+      if (mobIn) mobIn.value = '';
+      populateProvinceDropdown();
+      populateNetworkDropdown();
+      populatePriceDropdown();
+      updateKPIs();
+      renderMapAndSidebar();
+      map.setView(REGION_VIEWS.CAMBODIA.center, REGION_VIEWS.CAMBODIA.zoom);
+    }
+
+    document.getElementById('btn-clear-saved').onclick = handleClearSaved;
+    const clearMobileBtn = document.getElementById('btn-clear-saved-mobile');
+    if (clearMobileBtn) clearMobileBtn.onclick = handleClearSaved;
+
+    async function initDashboard() {
+      const cached = await loadDatasetFromBrowser();
+      if (cached && cached.sites && cached.sites.length > 0) {
+        allSites = cached.sites;
+        savedFileMeta = cached.meta || null;
+        compList = [];
+      }
+      populateProvinceDropdown();
+      populateNetworkDropdown();
+      populatePriceDropdown();
+      updateKPIs();
+      renderMapAndSidebar();
+      const initialBounds = L.latLngBounds(allSites.map(s => [s.lat, s.lng]));
+      if (initialBounds.isValid()) {
+        map.fitBounds(initialBounds, { padding: [40, 40] });
+      }
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    initDashboard();
+  </script>
+</body>
+</html>
